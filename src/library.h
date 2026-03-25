@@ -1,8 +1,9 @@
-#ifndef STARSHIP_H
-#define STARSHIP_H
+#ifndef LIBRARY_H
+#define LIBRARY_H
 
 #include "implementations.h"
 #include "adaptors.h"
 #include "commands.h"
+#include "command_queue.h"
 
-#endif // STARSHIP_H
+#endif // LIBRARY_H

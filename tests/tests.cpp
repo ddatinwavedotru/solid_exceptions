@@ -1,6 +1,5 @@
 #include "gtest/gtest.h"
 #include "library.h"
-#include "command_queue.h"
 
 bool hasText(std::ostream & os) {
     std::streampos pos = os.tellp();  // store current location
@@ -113,7 +112,6 @@ TEST(solid_exceptions, repeat_once_then_log_thrown_command) {
     EXPECT_FALSE(hasText(handlerLog));
 }
 
-
 // Реализовать стратегию обработки исключения - повторить два раза, потом записать в лог.
 // Указание: создать новую команду, точно такую же как в пункте 6. Тип этой команды будет показывать, что Команду не удалось выполнить два раза.
 TEST(solid_exceptions, repeat_twice_then_log_thrown_command) {
@@ -124,18 +122,16 @@ TEST(solid_exceptions, repeat_twice_then_log_thrown_command) {
 
     std::ostringstream log;
 
-    std::shared_ptr<CountedRepeatsCommand> repCmd;
-    eh->set<ThrowingNTimesCommand,std::runtime_error>([&cq,&repCmd](const ICommand_ptr & cmd, const std::exception & ex) ->ICommand_ptr {
-        return std::make_shared<EnqueueCommand>(cq, repCmd=std::make_shared<CountedRepeatsCommand>(cmd));
+    eh->set<ThrowingNTimesCommand,std::runtime_error>([&cq](const ICommand_ptr & cmd, const std::exception & ex) ->ICommand_ptr {
+        return std::make_shared<EnqueueCommand>(cq, std::make_shared<RepeatCommand>(cmd));
     });
 
-    eh->set<CountedRepeatsCommand,std::runtime_error>([&log,&cq](const ICommand_ptr & cmd, const std::exception & ex) ->ICommand_ptr {
+    eh->set<RepeatCommand,std::runtime_error>([&cq](const ICommand_ptr & cmd, const std::exception & ex) ->ICommand_ptr {
+        return std::make_shared<EnqueueCommand>(cq, std::make_shared<RepeatSecondTimeCommand>(cmd));
+    });
+
+    eh->set<RepeatSecondTimeCommand,std::runtime_error>([&log,&cq](const ICommand_ptr & cmd, const std::exception & ex) ->ICommand_ptr {
         EXPECT_FALSE(hasText(log));
-        CountedRepeatsCommand* cr=dynamic_cast<CountedRepeatsCommand*>(cmd.operator->());
-        EXPECT_TRUE(cr);
-        if(cr->count()<2) {
-            return std::make_shared<EnqueueCommand>(cq, cmd);
-        }
         return std::make_shared<LogExceptionCommand>(log,ex);
     });
 
@@ -143,8 +139,42 @@ TEST(solid_exceptions, repeat_twice_then_log_thrown_command) {
     cq->push(nT);
     (*el)();
     EXPECT_EQ(nT->left(),0);
+    EXPECT_TRUE(hasText(log));
+    EXPECT_FALSE(hasText(handlerLog));
+}
+
+
+// Реализовать стратегию обработки исключения - повторить N раз, потом записать в лог.
+TEST(solid_exceptions, repeat_N_times_then_log_thrown_command) {
+    ICommandQueue_ptr cq=std::make_shared<CommandQueue>();
+    std::ostringstream handlerLog;
+    IExceptionHandler_ptr eh=std::make_shared<ExceptionHandler>(handlerLog);
+    IEventLoop_ptr el=std::make_shared<EventLoop>(cq,eh);
+
+    std::ostringstream log;
+    size_t N=5;
+
+    std::shared_ptr<CountedRepeatsCommand> repCmd;
+    eh->set<ThrowingNTimesCommand,std::runtime_error>([&cq,&repCmd](const ICommand_ptr & cmd, const std::exception & ex) ->ICommand_ptr {
+        return std::make_shared<EnqueueCommand>(cq, repCmd=std::make_shared<CountedRepeatsCommand>(cmd));
+    });
+
+    eh->set<CountedRepeatsCommand,std::runtime_error>([&log,&cq,&N](const ICommand_ptr & cmd, const std::exception & ex) ->ICommand_ptr {
+        EXPECT_FALSE(hasText(log));
+        CountedRepeatsCommand* cr=dynamic_cast<CountedRepeatsCommand*>(cmd.operator->());
+        EXPECT_TRUE(cr);
+        if(cr->count()<N) {
+            return std::make_shared<EnqueueCommand>(cq, cmd);
+        }
+        return std::make_shared<LogExceptionCommand>(log,ex);
+    });
+
+    std::shared_ptr<ThrowingNTimesCommand> nT=std::make_shared<ThrowingNTimesCommand>(N+1);
+    cq->push(nT);
+    (*el)();
+    EXPECT_EQ(nT->left(),0);
     EXPECT_TRUE(repCmd);
-    EXPECT_EQ(repCmd->count(),2);
+    EXPECT_EQ(repCmd->count(),N);
     EXPECT_TRUE(hasText(log));
     EXPECT_FALSE(hasText(handlerLog));
 }
