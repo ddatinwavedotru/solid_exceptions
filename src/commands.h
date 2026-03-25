@@ -94,6 +94,11 @@ protected:
     size_t m_cnt;
 };
 
+class RepeatSecondTimeCommand: public RepeatCommand {
+public:
+    RepeatSecondTimeCommand(ICommand_ptr const & cmd):RepeatCommand(cmd) {}
+};
+
 
 class EnqueueCommand: public ICommand {
 public:
